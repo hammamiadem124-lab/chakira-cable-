@@ -1,0 +1,413 @@
+@page
+@model HRLeaveApp.Pages.AdminEmployeesListModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Liste des employés — HR Leave App</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+    <link rel="stylesheet" href="~/css/admin.css" />
+    <style>
+        .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+        .kpi-card {
+            background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px;
+            padding: 18px; text-align: center;
+        }
+        .kpi-card .kpi-value { font-size: 28px; font-weight: 700; color: var(--primary); }
+        .kpi-card .kpi-label { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+        .avatar {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 32px; height: 32px; border-radius: 50%;
+            background: var(--primary); color: white; font-size: 12px; font-weight: 700;
+            margin-right: 8px; vertical-align: middle;
+        }
+        .name-cell { display: flex; align-items: center; }
+
+        .badge-active { background: #dcfce7; color: var(--success); }
+        .badge-onleave { background: #fef3c7; color: var(--warning); }
+        .badge-sick { background: #fee2e2; color: var(--danger); }
+
+        .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+        .btn-secondary { background: var(--border); color: var(--text); }
+        .btn-danger-outline { background: transparent; color: var(--danger); border: 1px solid var(--danger); padding: 5px 10px; font-size: 12px; }
+
+        .pagination { display: flex; justify-content: center; gap: 10px; align-items: center; margin-top: 16px; }
+        .pagination button { background: var(--border); color: var(--text); padding: 6px 14px; }
+        .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .pagination span { font-size: 13px; color: var(--text-muted); }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <span class="brand"><img src="~/images/logo.jpeg" alt="Logo" style="height:28px; vertical-align:middle; margin-right:8px;" />HR Leave App — Admin</span>
+        <div>
+            <span class="user-info" id="userInfo"></span>
+            <button onclick="logout()" style="margin-left:12px;">Déconnexion</button>
+        </div>
+    </div>
+
+    <div class="admin-layout">
+        <div class="sidebar">
+            <a href="/AdminAddEmployee">➕ Ajouter un employé</a>
+            <a href="/AdminEmployeesList" class="active">👥 Liste des employés</a>
+            <a href="/AdminLeaveRequests">📋 Demandes de congé</a>
+            <a href="/AdminAnnouncements">📢 Annonces</a>
+        </div>
+
+        <div class="admin-content">
+            <div class="kpi-row">
+                <div class="kpi-card">
+                    <div class="kpi-value" id="kpiTotal">-</div>
+                    <div class="kpi-label">Total employés</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-value" id="kpiOnLeave">-</div>
+                    <div class="kpi-label">En congé aujourd'hui</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-value" id="kpiPending">-</div>
+                    <div class="kpi-label">Demandes en attente</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="toolbar">
+                    <h2 style="margin:0; padding:0; border:none;">Liste des employés</h2>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <input type="text" id="employeeSearch" placeholder="🔍 Rechercher (nom, CIN, département...)" style="padding:8px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; width:260px;" oninput="renderPage()" />
+                        <button class="btn-secondary" onclick="exportEmployees()">⬇️ Export Excel (CSV)</button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Employé</th>
+                            <th>CIN</th>
+                            <th>Département</th>
+                            <th>Solde congés</th>
+                            <th>Statut</th>
+                            <th>Rôle</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="employeesBody">
+                        <tr><td colspan="7">Chargement...</td></tr>
+                    </tbody>
+                </table>
+                <div class="pagination">
+                    <button id="prevBtn" onclick="changePage(-1)">&larr; Précédent</button>
+                    <span id="pageInfo"></span>
+                    <button id="nextBtn" onclick="changePage(1)">Suivant &rarr;</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal : modifier un employé -->
+    <div class="modal-overlay" id="editModal">
+        <div class="modal-box">
+            <h3>Modifier l'employé</h3>
+            <div id="editError" class="error-msg"></div>
+            <form id="editForm">
+                <input type="hidden" id="editId" />
+                <div class="form-group">
+                    <label for="editFirstName">Prénom</label>
+                    <input type="text" id="editFirstName" required />
+                </div>
+                <div class="form-group">
+                    <label for="editLastName">Nom</label>
+                    <input type="text" id="editLastName" required />
+                </div>
+                <div class="form-group">
+                    <label for="editEmail">Email</label>
+                    <input type="email" id="editEmail" />
+                </div>
+                <div class="form-group">
+                    <label for="editDepartment">Département</label>
+                    <input type="text" id="editDepartment" />
+                </div>
+                <div class="form-group">
+                    <label for="editBalance">Solde de congés (jours)</label>
+                    <input type="number" id="editBalance" min="0" />
+                </div>
+                <div class="form-group">
+                    <label for="editRole">Rôle</label>
+                    <select id="editRole">
+                        <option value="false">Employé</option>
+                        <option value="true">Admin</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editPassword">Nouveau mot de passe (laisser vide pour ne pas changer)</label>
+                    <input type="password" id="editPassword" />
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button type="submit" class="btn-primary">Enregistrer</button>
+                    <button type="button" onclick="closeEditModal()" style="background:var(--border);">Annuler</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal : accès rapide au calendrier -->
+    <div class="modal-overlay" id="calendarModal">
+        <div class="modal-box">
+            <h3 id="calendarModalTitle">Calendrier</h3>
+            <p style="color:var(--text-muted); font-size:14px;">Consulte ou modifie le planning de travail de cet employé.</p>
+            <div style="display:flex; gap:10px;">
+                <a id="calendarModalLink" class="btn-primary" style="text-decoration:none; text-align:center; display:inline-block; padding:10px 18px;">Ouvrir le calendrier</a>
+                <button type="button" onclick="closeCalendarModal()" style="background:var(--border);">Fermer</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const token = sessionStorage.getItem('hr_token');
+        const employee = JSON.parse(sessionStorage.getItem('hr_employee') || 'null');
+
+        if (!token || !employee || employee.role !== 'Admin') {
+            window.location.href = '/Login';
+        }
+
+        document.getElementById('userInfo').textContent = `${employee.firstName} ${employee.lastName} (Admin)`;
+
+        function logout() {
+            sessionStorage.removeItem('hr_token');
+            sessionStorage.removeItem('hr_employee');
+            window.location.href = '/Login';
+        }
+
+        let allEmployees = [];
+        let currentPage = 1;
+        const pageSize = 8;
+
+        function initials(first, last) {
+            return `${(first || '?')[0]}${(last || '?')[0]}`.toUpperCase();
+        }
+
+        function statusBadgeClass(status) {
+            if (status === 'En congé') return 'badge-onleave';
+            if (status === 'En arrêt') return 'badge-sick';
+            return 'badge-active';
+        }
+
+        async function loadStats() {
+            try {
+                const res = await fetch('/api/Employee/stats', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                document.getElementById('kpiTotal').textContent = data.totalEmployees;
+                document.getElementById('kpiOnLeave').textContent = data.onLeaveToday;
+                document.getElementById('kpiPending').textContent = data.pendingRequests;
+            } catch (err) { /* silencieux */ }
+        }
+
+        async function loadEmployees() {
+            const tbody = document.getElementById('employeesBody');
+            try {
+                const res = await fetch('/api/Employee', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.status === 401 || res.status === 403) { logout(); return; }
+                allEmployees = await res.json();
+                currentPage = 1;
+                renderPage();
+            } catch (err) {
+                tbody.innerHTML = '<tr><td colspan="7">Erreur de chargement.</td></tr>';
+            }
+        }
+
+        function renderPage() {
+            const tbody = document.getElementById('employeesBody');
+            const searchTerm = (document.getElementById('employeeSearch')?.value || '').toLowerCase().trim();
+
+            const filtered = searchTerm
+                ? allEmployees.filter(e =>
+                    `${e.firstName} ${e.lastName}`.toLowerCase().includes(searchTerm) ||
+                    (e.cin || '').toLowerCase().includes(searchTerm) ||
+                    (e.department || '').toLowerCase().includes(searchTerm)
+                  )
+                : allEmployees;
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7">${searchTerm ? 'Aucun résultat pour cette recherche.' : 'Aucun employé.'}</td></tr>`;
+                document.getElementById('pageInfo').textContent = '';
+                document.getElementById('prevBtn').disabled = true;
+                document.getElementById('nextBtn').disabled = true;
+                return;
+            }
+
+            const totalPages = Math.ceil(filtered.length / pageSize);
+            if (currentPage > totalPages) currentPage = 1;
+            const start = (currentPage - 1) * pageSize;
+            const pageItems = filtered.slice(start, start + pageSize);
+
+            tbody.innerHTML = pageItems.map(e => `
+                <tr>
+                    <td>
+                        <div class="name-cell">
+                            <span class="avatar">${initials(e.firstName, e.lastName)}</span>
+                            ${e.firstName} ${e.lastName}
+                        </div>
+                    </td>
+                    <td>${e.cin}</td>
+                    <td>${e.department || '-'}</td>
+                    <td>${e.annualLeaveBalance} jours</td>
+                    <td><span class="badge ${statusBadgeClass(e.status)}">${e.status}</span></td>
+                    <td>${e.role === 'Admin' ? 'Admin' : 'Employé'}</td>
+                    <td>
+                        <button class="icon-btn" onclick="openEditModal(${e.employeeId})">✏️</button>
+                        <button class="icon-btn" onclick="openCalendarModal(${e.employeeId}, '${(e.firstName + ' ' + e.lastName).replace(/'/g, "")}')">📅</button>
+                        <button class="btn-danger-outline" onclick="deactivateEmployee(${e.employeeId})" title="Désactiver">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            document.getElementById('pageInfo').textContent = `Page ${currentPage} / ${totalPages}`;
+            document.getElementById('prevBtn').disabled = currentPage <= 1;
+            document.getElementById('nextBtn').disabled = currentPage >= totalPages;
+        }
+
+        function changePage(delta) {
+            const searchTerm = (document.getElementById('employeeSearch')?.value || '').toLowerCase().trim();
+            const filtered = searchTerm
+                ? allEmployees.filter(e =>
+                    `${e.firstName} ${e.lastName}`.toLowerCase().includes(searchTerm) ||
+                    (e.cin || '').toLowerCase().includes(searchTerm) ||
+                    (e.department || '').toLowerCase().includes(searchTerm)
+                  )
+                : allEmployees;
+            const totalPages = Math.ceil(filtered.length / pageSize);
+            const newPage = currentPage + delta;
+            if (newPage < 1 || newPage > totalPages) return;
+            currentPage = newPage;
+            renderPage();
+        }
+
+        async function deactivateEmployee(id) {
+            if (!confirm('Désactiver ce compte employé ? Ses données historiques (congés, planning) seront conservées.')) return;
+            try {
+                const res = await fetch(`/api/Employee/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) { alert('Erreur lors de la désactivation.'); return; }
+                loadEmployees();
+                loadStats();
+            } catch (err) {
+                alert('Impossible de contacter le serveur.');
+            }
+        }
+
+        async function exportEmployees() {
+            try {
+                const res = await fetch('/api/Employee/export', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) { alert("Erreur lors de l'export."); return; }
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `employes_${new Date().toISOString().slice(0,10)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (err) {
+                alert('Impossible de contacter le serveur.');
+            }
+        }
+
+        async function openEditModal(id) {
+            const errorDiv = document.getElementById('editError');
+            errorDiv.style.display = 'none';
+            try {
+                const res = await fetch(`/api/Employee/${id}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) { alert("Impossible de charger l'employé."); return; }
+                const data = await res.json();
+
+                document.getElementById('editId').value = data.employeeId;
+                document.getElementById('editFirstName').value = data.firstName;
+                document.getElementById('editLastName').value = data.lastName;
+                document.getElementById('editEmail').value = data.email || '';
+                document.getElementById('editDepartment').value = data.department || '';
+                document.getElementById('editBalance').value = data.annualLeaveBalance;
+                document.getElementById('editRole').value = data.isAdmin ? 'true' : 'false';
+                document.getElementById('editPassword').value = '';
+
+                document.getElementById('editModal').classList.add('open');
+            } catch (err) {
+                alert('Erreur réseau.');
+            }
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').classList.remove('open');
+        }
+
+        document.getElementById('editForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const errorDiv = document.getElementById('editError');
+            errorDiv.style.display = 'none';
+
+            const id = document.getElementById('editId').value;
+            const body = {
+                firstName: document.getElementById('editFirstName').value,
+                lastName: document.getElementById('editLastName').value,
+                email: document.getElementById('editEmail').value,
+                department: document.getElementById('editDepartment').value,
+                annualLeaveBalance: parseInt(document.getElementById('editBalance').value || '0'),
+                isAdmin: document.getElementById('editRole').value === 'true',
+                newPassword: document.getElementById('editPassword').value
+            };
+
+            try {
+                const res = await fetch(`/api/Employee/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    errorDiv.textContent = data.message || "Erreur lors de la mise à jour.";
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+
+                closeEditModal();
+                loadEmployees();
+            } catch (err) {
+                errorDiv.textContent = 'Impossible de contacter le serveur.';
+                errorDiv.style.display = 'block';
+            }
+        });
+
+        function openCalendarModal(employeeId, name) {
+            document.getElementById('calendarModalTitle').textContent = `Calendrier de ${name}`;
+            document.getElementById('calendarModalLink').href = `/AdminCalendar?employeeId=${employeeId}&name=${encodeURIComponent(name)}`;
+            document.getElementById('calendarModal').classList.add('open');
+        }
+
+        function closeCalendarModal() {
+            document.getElementById('calendarModal').classList.remove('open');
+        }
+
+        loadStats();
+        loadEmployees();
+    </script>
+</body>
+</html>

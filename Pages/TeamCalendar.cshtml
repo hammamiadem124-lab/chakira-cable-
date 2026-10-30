@@ -1,0 +1,161 @@
+@page
+@model HRLeaveApp.Pages.TeamCalendarModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Calendrier d'équipe — HR Leave App</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+    <style>
+        .avatar {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 32px; height: 32px; border-radius: 50%;
+            background: var(--primary); color: white; font-size: 12px; font-weight: 700;
+            margin-right: 10px; vertical-align: middle; flex-shrink: 0;
+        }
+        .absence-row {
+            display: flex; align-items: center; padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .absence-row:last-child { border-bottom: none; }
+        .absence-info { flex: 1; }
+        .absence-info .name { font-weight: 600; font-size: 14px; }
+        .absence-info .dept { font-size: 12px; color: var(--text-muted); }
+        .absence-dates { font-size: 12px; color: var(--text-muted); text-align: right; }
+        .empty-state { color: var(--text-muted); font-size: 14px; padding: 20px 0; text-align: center; }
+        .nav-btns { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
+        .nav-btns button { background: var(--primary); color: white; padding: 6px 14px; }
+        .month-label { font-weight: 700; font-size: 16px; min-width: 160px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <span class="brand"><img src="~/images/logo.jpeg" alt="Logo" style="height:28px; vertical-align:middle; margin-right:8px;" />HR Leave App</span>
+        <div>
+            <span class="user-info" id="userInfo"></span>
+            <button onclick="goBack()" style="margin-left:12px;">Retour</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>👥 Absents aujourd'hui</h2>
+            <div id="todayList"><div class="empty-state">Chargement...</div></div>
+        </div>
+
+        <div class="card">
+            <h2>Absences du mois</h2>
+            <div class="nav-btns">
+                <button onclick="changeMonth(-1)">&larr; Précédent</button>
+                <span class="month-label" id="monthLabel"></span>
+                <button onclick="changeMonth(1)">Suivant &rarr;</button>
+            </div>
+            <div id="monthList"><div class="empty-state">Chargement...</div></div>
+        </div>
+    </div>
+
+    <script>
+        const token = sessionStorage.getItem('hr_token');
+        const employee = JSON.parse(sessionStorage.getItem('hr_employee') || 'null');
+
+        if (!token || !employee) {
+            window.location.href = '/Login';
+        }
+
+        document.getElementById('userInfo').textContent = `${employee.firstName} ${employee.lastName}`;
+
+        function goBack() {
+            window.location.href = employee.role === 'Admin' ? '/AdminLeaveRequests' : '/EmployeeDashboard';
+        }
+
+        function initials(first, last) {
+            return `${(first || '?')[0]}${(last || '?')[0]}`.toUpperCase();
+        }
+
+        function leaveTypeLabel(type) {
+            const labels = { Annual: 'Congé annuel', Sick: 'Congé maladie', Unpaid: 'Sans solde', Other: 'Autre' };
+            return labels[type] || type;
+        }
+
+        async function loadToday() {
+            const container = document.getElementById('todayList');
+            try {
+                const res = await fetch('/api/Team/absences-today', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.status === 401) { window.location.href = '/Login'; return; }
+                const data = await res.json();
+
+                if (data.length === 0) {
+                    container.innerHTML = '<div class="empty-state">Personne n\'est absent aujourd\'hui 🎉</div>';
+                    return;
+                }
+
+                container.innerHTML = data.map(a => `
+                    <div class="absence-row">
+                        <span class="avatar">${initials(a.firstName, a.lastName)}</span>
+                        <div class="absence-info">
+                            <div class="name">${a.firstName} ${a.lastName}</div>
+                            <div class="dept">${a.department || '-'} · ${leaveTypeLabel(a.leaveType)}</div>
+                        </div>
+                        <div class="absence-dates">Retour le ${new Date(a.endDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                container.innerHTML = '<div class="empty-state">Erreur de chargement.</div>';
+            }
+        }
+
+        let currentDate = new Date();
+        const monthNames = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+        function changeMonth(delta) {
+            currentDate.setMonth(currentDate.getMonth() + delta);
+            loadMonth();
+        }
+
+        async function loadMonth() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            document.getElementById('monthLabel').textContent = `${monthNames[month - 1]} ${year}`;
+
+            const container = document.getElementById('monthList');
+            try {
+                const res = await fetch(`/api/Team/absences?year=${year}&month=${month}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.status === 401) { window.location.href = '/Login'; return; }
+                const data = await res.json();
+
+                if (data.length === 0) {
+                    container.innerHTML = '<div class="empty-state">Aucune absence ce mois-ci.</div>';
+                    return;
+                }
+
+                container.innerHTML = data.map(a => `
+                    <div class="absence-row">
+                        <span class="avatar">${initials(a.firstName, a.lastName)}</span>
+                        <div class="absence-info">
+                            <div class="name">${a.firstName} ${a.lastName}</div>
+                            <div class="dept">${a.department || '-'} · ${leaveTypeLabel(a.leaveType)}</div>
+                        </div>
+                        <div class="absence-dates">
+                            ${new Date(a.startDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                            → ${new Date(a.endDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                container.innerHTML = '<div class="empty-state">Erreur de chargement.</div>';
+            }
+        }
+
+        loadToday();
+        loadMonth();
+    </script>
+</body>
+</html>

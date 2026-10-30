@@ -1,0 +1,648 @@
+@page
+@model HRLeaveApp.Pages.EmployeeDashboardModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gestion des Congés — HR Leave App</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+    <link rel="stylesheet" href="~/css/admin.css" />
+    <style>
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            align-items: start;
+            padding: 24px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        @@media (max-width: 900px) {
+            .two-col { grid-template-columns: 1fr; }
+        }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 6px;
+            margin-top: 16px;
+        }
+        .day-header { font-weight: 600; font-size: 12px; color: var(--text-muted); text-align: center; padding: 4px; }
+        .day-cell {
+            min-height: 60px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 6px;
+            font-size: 13px;
+            text-align: center;
+            color: var(--text);
+        }
+        .day-cell.empty { background: transparent; border: none; }
+        .day-cell.weekend { background: #eef1f6; color: var(--text-muted); }
+        .day-cell.approved { background: #dcfce7; color: var(--success); font-weight: 600; }
+        .day-cell.pending { background: #fef3c7; color: var(--warning); font-weight: 600; }
+        .day-cell.today { border: 2px solid var(--primary); font-weight: 700; }
+
+        .nav-btns { display: flex; gap: 10px; align-items: center; margin-bottom: 4px; justify-content: center; }
+        .nav-btns button { background: var(--card-bg); color: var(--primary); border: 1px solid var(--border); padding: 6px 12px; }
+        .month-label { font-weight: 700; font-size: 16px; min-width: 140px; text-align: center; }
+
+        .legend { display:flex; gap:16px; margin-top:16px; font-size:12px; color:var(--text-muted); flex-wrap: wrap; }
+        .legend span { display:flex; align-items:center; gap:6px; }
+        .legend .dot { width:10px; height:10px; border-radius:3px; display:inline-block; }
+
+        .announcement-card {
+            background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px;
+            padding: 12px 16px; margin-bottom: 10px;
+        }
+        .announcement-card .ann-title { font-weight: 700; color: #92400e; font-size: 14px; margin-bottom: 4px; }
+        .announcement-card .ann-msg { font-size: 13px; color: #78350f; }
+
+        /* ---- Assistant IA (bulle flottante) ---- */
+        .chat-bubble {
+            position: fixed; bottom: 24px; right: 24px;
+            width: 56px; height: 56px; border-radius: 50%;
+            background: var(--primary); color: white;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 26px; cursor: pointer; border: none;
+            box-shadow: 0 4px 16px rgba(37,99,235,0.4);
+            z-index: 100;
+        }
+        .chat-panel {
+            position: fixed; bottom: 92px; right: 24px;
+            width: 340px; max-height: 480px;
+            background: var(--card-bg); border-radius: 14px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+            display: none; flex-direction: column;
+            overflow: hidden; z-index: 100;
+            border: 1px solid var(--border);
+        }
+        .chat-panel.open { display: flex; }
+        .chat-header {
+            background: var(--primary); color: white;
+            padding: 14px 16px; font-weight: 700; font-size: 14px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .chat-header button { background: transparent; color: white; padding: 2px 8px; }
+        .chat-messages {
+            flex: 1; overflow-y: auto; padding: 14px;
+            display: flex; flex-direction: column; gap: 10px;
+            font-size: 13px; min-height: 200px;
+        }
+        .chat-msg { max-width: 85%; padding: 8px 12px; border-radius: 10px; line-height: 1.4; }
+        .chat-msg.user { align-self: flex-end; background: var(--primary); color: white; }
+        .chat-msg.ai { align-self: flex-start; background: #f1f5f9; color: var(--text); }
+        .chat-msg.ai.loading { color: var(--text-muted); font-style: italic; }
+        .chat-input-row { display: flex; border-top: 1px solid var(--border); }
+        .chat-input-row input {
+            flex: 1; border: none; padding: 12px; font-size: 13px; outline: none;
+        }
+        .chat-input-row button {
+            background: var(--primary); color: white; border-radius: 0; padding: 0 16px;
+        }
+
+        .chat-quick-questions {
+            display: flex; flex-direction: column; gap: 6px;
+            padding: 10px 14px; border-top: 1px solid var(--border);
+            max-height: 160px; overflow-y: auto;
+        }
+        .chat-quick-questions button {
+            background: #f1f5f9; color: var(--text); border: 1px solid var(--border);
+            text-align: left; padding: 7px 10px; border-radius: 8px; font-size: 12px;
+        }
+        .chat-quick-questions button:hover { background: #e2e8f0; }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <span class="brand"><img src="~/images/logo.jpeg" alt="Logo" style="height:28px; vertical-align:middle; margin-right:8px;" />Gestion des Congés</span>
+        <div>
+            <a href="/TeamCalendar" style="margin-right:16px; color: var(--primary); text-decoration:none; font-weight:600;">👥 Équipe</a>
+            <span class="user-info" id="userInfo"></span>
+            <button onclick="openAccountModal()" style="margin-left:12px; background:var(--border); color:var(--text);">⚙️ Mon compte</button>
+            <button onclick="logout()" style="margin-left:12px;">Déconnexion</button>
+        </div>
+    </div>
+
+    <div id="announcementsBanner" style="max-width:1200px; margin: 16px auto 0; padding: 0 24px;"></div>
+
+    <!-- Modal : mon compte / changer le mot de passe -->
+    <div class="modal-overlay" id="accountModal">
+        <div class="modal-box">
+            <h3>Mon compte</h3>
+            <div id="accountError" class="error-msg"></div>
+            <div id="accountSuccess" class="error-msg" style="background:#dcfce7; color:var(--success);"></div>
+            <form id="passwordForm">
+                <div class="form-group">
+                    <label for="currentPassword">Mot de passe actuel</label>
+                    <input type="password" id="currentPassword" required />
+                </div>
+                <div class="form-group">
+                    <label for="newPassword">Nouveau mot de passe (min. 6 caractères)</label>
+                    <input type="password" id="newPassword" required minlength="6" />
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button type="submit" class="btn-primary">Changer le mot de passe</button>
+                    <button type="button" onclick="closeAccountModal()" style="background:var(--border);">Fermer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="two-col">
+        <div>
+            <div class="card">
+                <h2>Nouvelle demande de congé exceptionnel</h2>
+                <div id="createError" class="error-msg"></div>
+                <form id="leaveForm">
+                    <div class="form-group">
+                        <label for="startDate">Date de début</label>
+                        <input type="date" id="startDate" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="endDate">Date de fin</label>
+                        <input type="date" id="endDate" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="leaveType">Type de congé</label>
+                        <select id="leaveType">
+                            <option value="Annual">Congé annuel</option>
+                            <option value="Sick">Congé maladie</option>
+                            <option value="Unpaid">Congé sans solde</option>
+                            <option value="Other">Autre</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="reason">Motif</label>
+                        <textarea id="reason" rows="3" placeholder="Ex : mariage, maladie, événement familial..."></textarea>
+                    </div>
+                    <button type="submit" class="btn-primary">Envoyer la demande</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>Mes demandes</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>N°</th>
+                            <th>Début</th>
+                            <th>Fin</th>
+                            <th>Motif</th>
+                            <th>Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody id="myRequestsBody">
+                        <tr><td colspan="5">Chargement...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Mon calendrier de travail</h2>
+            <div class="nav-btns">
+                <button onclick="changeMonth(-1)">&lsaquo;</button>
+                <span class="month-label" id="monthLabel"></span>
+                <button onclick="changeMonth(1)">&rsaquo;</button>
+            </div>
+            <div class="calendar-grid" id="calendarGrid"></div>
+            <div class="legend">
+                <span><i class="dot" style="background:#dcfce7;"></i> Congé accepté</span>
+                <span><i class="dot" style="background:#fef3c7;"></i> En attente</span>
+                <span><i class="dot" style="background:#eef1f6;"></i> Week-end</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assistant RH (sans IA, réponses via la base de données) -->
+    <button class="chat-bubble" onclick="toggleChat()">💬</button>
+    <div class="chat-panel" id="chatPanel">
+        <div class="chat-header">
+            <span>🙋 Assistant RH</span>
+            <button onclick="toggleChat()">✕</button>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+            <div class="chat-msg ai">Bonjour ! Choisis une question ci-dessous, ou tape la tienne.</div>
+        </div>
+        <div class="chat-quick-questions" id="quickQuestions">
+            <button onclick="askQuick('balance')">💰 Solde de congés restant</button>
+            <button onclick="askQuick('lastStatus')">📋 Statut de ma dernière demande</button>
+            <button onclick="askQuick('pendingCount')">⏳ Ai-je des demandes en attente ?</button>
+            <button onclick="askQuick('nextApproved')">📅 Mon prochain congé approuvé</button>
+            <button onclick="askQuick('teamAbsences')">👥 Qui est absent aujourd'hui ?</button>
+            <button onclick="askQuick('department')">🏢 Mon département</button>
+        </div>
+        <div class="chat-input-row">
+            <input type="text" id="chatInput" placeholder="Ou tape ta question..." onkeypress="if(event.key==='Enter') sendChatMessage()" />
+            <button onclick="sendChatMessage()">➤</button>
+        </div>
+    </div>
+
+    <script>
+        const token = sessionStorage.getItem('hr_token');
+        const employee = JSON.parse(sessionStorage.getItem('hr_employee') || 'null');
+
+        if (!token || !employee) {
+            window.location.href = '/Login';
+        }
+
+        function logout() {
+            sessionStorage.removeItem('hr_token');
+            sessionStorage.removeItem('hr_employee');
+            window.location.href = '/Login';
+        }
+
+        async function loadProfile() {
+            try {
+                const res = await fetch('/api/Auth/me', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.status === 401) { logout(); return; }
+                const data = await res.json();
+                document.getElementById('userInfo').textContent = `${data.firstName} ${data.lastName} · ${data.department || 'Employé'}`;
+            } catch (err) {
+                document.getElementById('userInfo').textContent = `${employee.firstName} ${employee.lastName}`;
+            }
+        }
+
+        function badgeClass(status) {
+            if (status === 'Approved') return 'badge-approved';
+            if (status === 'Rejected') return 'badge-rejected';
+            return 'badge-pending';
+        }
+
+        function statusLabel(status) {
+            if (status === 'Approved') return 'Approuvé';
+            if (status === 'Rejected') return 'Refusé';
+            return 'En attente';
+        }
+
+        let myLeaveRequests = [];
+
+        async function loadMyRequests() {
+            const tbody = document.getElementById('myRequestsBody');
+            try {
+                const res = await fetch('/api/Leave/mine', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.status === 401) { logout(); return; }
+                myLeaveRequests = await res.json();
+
+                if (myLeaveRequests.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5">Aucune demande pour le moment.</td></tr>';
+                } else {
+                    tbody.innerHTML = myLeaveRequests.map(r => `
+                        <tr>
+                            <td>${r.leaveRequestId}</td>
+                            <td>${new Date(r.startDate).toLocaleDateString('fr-FR')}</td>
+                            <td>${new Date(r.endDate).toLocaleDateString('fr-FR')}</td>
+                            <td>${r.reason || '-'}</td>
+                            <td><span class="badge ${badgeClass(r.status)}">${statusLabel(r.status)}</span></td>
+                        </tr>
+                    `).join('');
+                }
+
+                renderCalendar();
+            } catch (err) {
+                tbody.innerHTML = '<tr><td colspan="5">Erreur de chargement.</td></tr>';
+            }
+        }
+
+        document.getElementById('leaveForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const errorDiv = document.getElementById('createError');
+            errorDiv.style.display = 'none';
+
+            const body = {
+                startDate: document.getElementById('startDate').value,
+                endDate: document.getElementById('endDate').value,
+                leaveType: document.getElementById('leaveType').value,
+                reason: document.getElementById('reason').value
+            };
+
+            try {
+                const res = await fetch('/api/Leave', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    errorDiv.textContent = data.message || "Erreur lors de l'envoi de la demande.";
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+
+                document.getElementById('leaveForm').reset();
+                loadMyRequests();
+            } catch (err) {
+                errorDiv.textContent = 'Impossible de contacter le serveur.';
+                errorDiv.style.display = 'block';
+            }
+        });
+
+        // ---- Calendrier ----
+        let currentDate = new Date();
+        const dayNames = ['LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM', 'DIM'];
+        const monthNames = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+        function changeMonth(delta) {
+            currentDate.setMonth(currentDate.getMonth() + delta);
+            renderCalendar();
+        }
+
+        let myHolidays = [];
+
+        async function loadHolidays(year) {
+            try {
+                const res = await fetch(`/api/Holiday?year=${year}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) myHolidays = await res.json();
+            } catch (err) { /* silencieux */ }
+        }
+
+        function holidayForDate(date) {
+            return myHolidays.find(h => new Date(h.holidayDate).toDateString() === date.toDateString());
+        }
+
+        function leaveStatusForDate(date) {
+            const match = myLeaveRequests.find(r => {
+                const start = new Date(new Date(r.startDate).toDateString());
+                const end = new Date(new Date(r.endDate).toDateString());
+                return date >= start && date <= end && r.status !== 'Rejected';
+            });
+            return match ? match.status : null; // 'Approved' | 'Pending' | null
+        }
+
+        async function renderCalendar() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            document.getElementById('monthLabel').textContent = `${monthNames[month - 1]} ${year}`;
+
+            await loadHolidays(year);
+
+            const grid = document.getElementById('calendarGrid');
+            grid.innerHTML = '';
+
+            dayNames.forEach(d => {
+                const header = document.createElement('div');
+                header.className = 'day-header';
+                header.textContent = d;
+                grid.appendChild(header);
+            });
+
+            const firstDay = new Date(year, month - 1, 1);
+            let startOffset = (firstDay.getDay() + 6) % 7; // lundi = 0
+            const daysInMonth = new Date(year, month, 0).getDate();
+
+            const today = new Date();
+            const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month - 1;
+
+            for (let i = 0; i < startOffset; i++) {
+                const empty = document.createElement('div');
+                empty.className = 'day-cell empty';
+                grid.appendChild(empty);
+            }
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(year, month - 1, day);
+                const cell = document.createElement('div');
+                cell.className = 'day-cell';
+
+                const dayOfWeek = date.getDay(); // 0 = dimanche, 6 = samedi
+                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                const leaveStatus = leaveStatusForDate(date);
+                const holiday = holidayForDate(date);
+
+                if (leaveStatus === 'Approved') cell.classList.add('approved');
+                else if (leaveStatus === 'Pending') cell.classList.add('pending');
+                else if (holiday) { cell.classList.add('weekend'); cell.title = holiday.name; }
+                else if (isWeekend) cell.classList.add('weekend');
+
+                if (isCurrentMonth && today.getDate() === day) {
+                    cell.classList.add('today');
+                }
+
+                cell.innerHTML = holiday ? `${day}<br><small style="font-size:9px;">🎉</small>` : day;
+                grid.appendChild(cell);
+            }
+        }
+
+        function toggleChat() {
+            document.getElementById('chatPanel').classList.toggle('open');
+        }
+
+        let myProfile = null;
+
+        function addUserMessage(text) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const msg = document.createElement('div');
+            msg.className = 'chat-msg user';
+            msg.textContent = text;
+            messagesDiv.appendChild(msg);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function addAiMessage(text) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const msg = document.createElement('div');
+            msg.className = 'chat-msg ai';
+            msg.textContent = text;
+            messagesDiv.appendChild(msg);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function statusLabelFr(status) {
+            if (status === 'Approved') return 'approuvée';
+            if (status === 'Rejected') return 'refusée';
+            return 'en attente';
+        }
+
+        // ---- Questions rapides : réponses calculées directement depuis les données déjà en mémoire ----
+        async function askQuick(key) {
+            const labels = {
+                balance: '💰 Quel est mon solde de congés restant ?',
+                lastStatus: '📋 Quel est le statut de ma dernière demande ?',
+                pendingCount: '⏳ Ai-je des demandes en attente ?',
+                nextApproved: '📅 Quel est mon prochain congé approuvé ?',
+                teamAbsences: "👥 Qui est absent dans mon équipe aujourd'hui ?",
+                department: '🏢 Quel est mon département ?'
+            };
+            addUserMessage(labels[key] || key);
+
+            if (!myProfile) {
+                addAiMessage("Un instant, tes informations sont encore en train de charger. Réessaie dans une seconde.");
+                return;
+            }
+
+            switch (key) {
+                case 'balance':
+                    addAiMessage(`Il te reste ${myProfile.annualLeaveBalance} jour(s) de congé.`);
+                    break;
+
+                case 'lastStatus':
+                    if (myLeaveRequests.length === 0) {
+                        addAiMessage("Tu n'as fait aucune demande de congé pour le moment.");
+                    } else {
+                        const last = myLeaveRequests[0];
+                        addAiMessage(`Ta dernière demande (du ${new Date(last.startDate).toLocaleDateString('fr-FR')} au ${new Date(last.endDate).toLocaleDateString('fr-FR')}) est ${statusLabelFr(last.status)}.`);
+                    }
+                    break;
+
+                case 'pendingCount':
+                    const pending = myLeaveRequests.filter(r => r.status === 'Pending');
+                    addAiMessage(pending.length === 0
+                        ? "Tu n'as aucune demande en attente de validation."
+                        : `Tu as ${pending.length} demande(s) en attente de validation.`);
+                    break;
+
+                case 'nextApproved':
+                    const today = new Date(new Date().toDateString());
+                    const upcoming = myLeaveRequests
+                        .filter(r => r.status === 'Approved' && new Date(r.endDate) >= today)
+                        .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+                    addAiMessage(upcoming.length === 0
+                        ? "Tu n'as pas de congé approuvé à venir."
+                        : `Ton prochain congé approuvé commence le ${new Date(upcoming[0].startDate).toLocaleDateString('fr-FR')} (${upcoming[0].leaveType}).`);
+                    break;
+
+                case 'teamAbsences':
+                    try {
+                        const res = await fetch('/api/Team/absences-today', {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        const data = await res.json();
+                        addAiMessage(data.length === 0
+                            ? "Personne n'est absent aujourd'hui dans l'entreprise. 🎉"
+                            : `Absent(s) aujourd'hui : ${data.map(a => `${a.firstName} ${a.lastName}`).join(', ')}.`);
+                    } catch (err) {
+                        addAiMessage("Impossible de récupérer les absences pour le moment.");
+                    }
+                    break;
+
+                case 'department':
+                    addAiMessage(`Tu fais partie du département ${myProfile.department || 'non renseigné'}.`);
+                    break;
+            }
+        }
+
+        // ---- Champ texte libre : reconnaissance simple de mots-clés, toujours sans IA externe ----
+        function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const question = input.value.trim();
+            if (!question) return;
+            input.value = '';
+
+            const q = question.toLowerCase();
+
+            if (q.includes('solde') || q.includes('reste')) {
+                askQuick('balance');
+            } else if (q.includes('statut') || q.includes('derni')) {
+                askQuick('lastStatus');
+            } else if (q.includes('attente')) {
+                askQuick('pendingCount');
+            } else if (q.includes('prochain')) {
+                askQuick('nextApproved');
+            } else if (q.includes('absent') || q.includes('équipe') || q.includes('equipe')) {
+                askQuick('teamAbsences');
+            } else if (q.includes('département') || q.includes('departement')) {
+                askQuick('department');
+            } else {
+                addUserMessage(question);
+                addAiMessage("Je ne comprends pas encore cette question. Essaie l'une des suggestions ci-dessous, ou reformule avec des mots comme \"solde\", \"statut\", \"attente\", \"absent\"...");
+            }
+        }
+
+        async function loadChatProfile() {
+            try {
+                const res = await fetch('/api/Auth/me', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) myProfile = await res.json();
+            } catch (err) { /* silencieux, déjà géré par loadProfile() */ }
+        }
+
+        async function loadAnnouncements() {
+            const banner = document.getElementById('announcementsBanner');
+            try {
+                const res = await fetch('/api/Announcement', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                banner.innerHTML = data.map(a => `
+                    <div class="announcement-card">
+                        <div class="ann-title">📢 ${a.title}</div>
+                        <div class="ann-msg">${a.message}</div>
+                    </div>
+                `).join('');
+            } catch (err) { /* silencieux */ }
+        }
+
+        function openAccountModal() {
+            document.getElementById('accountModal').classList.add('open');
+            document.getElementById('accountError').style.display = 'none';
+            document.getElementById('accountSuccess').style.display = 'none';
+            document.getElementById('passwordForm').reset();
+        }
+
+        function closeAccountModal() {
+            document.getElementById('accountModal').classList.remove('open');
+        }
+
+        document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const errorDiv = document.getElementById('accountError');
+            const successDiv = document.getElementById('accountSuccess');
+            errorDiv.style.display = 'none';
+            successDiv.style.display = 'none';
+
+            const body = {
+                currentPassword: document.getElementById('currentPassword').value,
+                newPassword: document.getElementById('newPassword').value
+            };
+
+            try {
+                const res = await fetch('/api/Auth/change-password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                const data = await res.json().catch(() => ({}));
+
+                if (!res.ok) {
+                    errorDiv.textContent = data.message || "Erreur lors du changement de mot de passe.";
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+
+                successDiv.textContent = data.message || 'Mot de passe modifié avec succès.';
+                successDiv.style.display = 'block';
+                document.getElementById('passwordForm').reset();
+            } catch (err) {
+                errorDiv.textContent = 'Impossible de contacter le serveur.';
+                errorDiv.style.display = 'block';
+            }
+        });
+
+        loadProfile();
+        loadMyRequests();
+        loadChatProfile();
+        loadAnnouncements();
+    </script>
+</body>
+</html>

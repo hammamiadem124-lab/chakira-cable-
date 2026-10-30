@@ -1,0 +1,137 @@
+@page
+@model HRLeaveApp.Pages.AdminAddEmployeeModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ajouter un employé — HR Leave App</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+    <link rel="stylesheet" href="~/css/admin.css" />
+</head>
+<body>
+    <div class="navbar">
+        <span class="brand"><img src="~/images/logo.jpeg" alt="Logo" style="height:28px; vertical-align:middle; margin-right:8px;" />HR Leave App — Admin</span>
+        <div>
+            <span class="user-info" id="userInfo"></span>
+            <button onclick="logout()" style="margin-left:12px;">Déconnexion</button>
+        </div>
+    </div>
+
+    <div class="admin-layout">
+        <div class="sidebar">
+            <a href="/AdminAddEmployee" class="active">➕ Ajouter un employé</a>
+            <a href="/AdminEmployeesList">👥 Liste des employés</a>
+            <a href="/AdminLeaveRequests">📋 Demandes de congé</a>
+            <a href="/AdminAnnouncements">📢 Annonces</a>
+        </div>
+
+        <div class="admin-content">
+            <div class="card" style="max-width:600px;">
+                <h2>Ajouter un employé</h2>
+                <div id="createEmpError" class="error-msg"></div>
+                <div id="createEmpSuccess" class="error-msg" style="background:#dcfce7; color:var(--success);"></div>
+                <form id="employeeForm">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                        <div class="form-group">
+                            <label for="empCin">CIN</label>
+                            <input type="text" id="empCin" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="empPassword">Mot de passe</label>
+                            <input type="password" id="empPassword" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="empFirstName">Prénom</label>
+                            <input type="text" id="empFirstName" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="empLastName">Nom</label>
+                            <input type="text" id="empLastName" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="empEmail">Email</label>
+                            <input type="email" id="empEmail" />
+                        </div>
+                        <div class="form-group">
+                            <label for="empDepartment">Département</label>
+                            <input type="text" id="empDepartment" />
+                        </div>
+                        <div class="form-group">
+                            <label for="empRole">Rôle</label>
+                            <select id="empRole">
+                                <option value="false">Employé</option>
+                                <option value="true">Admin</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-primary">Créer le compte</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const token = sessionStorage.getItem('hr_token');
+        const employee = JSON.parse(sessionStorage.getItem('hr_employee') || 'null');
+
+        if (!token || !employee || employee.role !== 'Admin') {
+            window.location.href = '/Login';
+        }
+
+        document.getElementById('userInfo').textContent = `${employee.firstName} ${employee.lastName} (Admin)`;
+
+        function logout() {
+            sessionStorage.removeItem('hr_token');
+            sessionStorage.removeItem('hr_employee');
+            window.location.href = '/Login';
+        }
+
+        document.getElementById('employeeForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const errorDiv = document.getElementById('createEmpError');
+            const successDiv = document.getElementById('createEmpSuccess');
+            errorDiv.style.display = 'none';
+            successDiv.style.display = 'none';
+
+            const body = {
+                cin: document.getElementById('empCin').value,
+                password: document.getElementById('empPassword').value,
+                firstName: document.getElementById('empFirstName').value,
+                lastName: document.getElementById('empLastName').value,
+                email: document.getElementById('empEmail').value,
+                department: document.getElementById('empDepartment').value,
+                isAdmin: document.getElementById('empRole').value === 'true'
+            };
+
+            try {
+                const res = await fetch('/api/Employee', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    errorDiv.textContent = data.message || "Erreur lors de la création.";
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+
+                document.getElementById('employeeForm').reset();
+                successDiv.textContent = 'Employé créé avec succès !';
+                successDiv.style.display = 'block';
+            } catch (err) {
+                errorDiv.textContent = 'Impossible de contacter le serveur.';
+                errorDiv.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>

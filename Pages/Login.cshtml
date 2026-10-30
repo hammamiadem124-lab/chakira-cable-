@@ -1,0 +1,74 @@
+@page
+@model HRLeaveApp.Pages.LoginModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Connexion — HR Leave App</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body>
+    <div class="login-wrapper">
+        <div class="login-card">
+            <img src="~/images/logo.jpeg" alt="Chakira Cable" style="display:block; max-width:220px; margin:0 auto 20px;" />
+            <h1>Connexion Employé</h1>
+            <div id="errorMsg" class="error-msg"></div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="cin">CIN</label>
+                    <input type="text" id="cin" name="cin" required autocomplete="username" />
+                </div>
+                <div class="form-group">
+                    <label for="password">Mot de passe</label>
+                    <input type="password" id="password" name="password" required autocomplete="current-password" />
+                </div>
+                <button type="submit" class="btn-primary">Se connecter</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const errorDiv = document.getElementById('errorMsg');
+            errorDiv.style.display = 'none';
+
+            const cin = document.getElementById('cin').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('/api/Auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ CIN: cin, Password: password })
+                });
+
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    errorDiv.textContent = data.message || 'CIN ou mot de passe incorrect.';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+
+                const data = await response.json();
+                // Stocke le token et les infos de session pour cette session de navigateur uniquement
+                sessionStorage.setItem('hr_token', data.token);
+                sessionStorage.setItem('hr_employee', JSON.stringify(data.employee));
+
+                if (data.employee.role === 'Admin') {
+                    window.location.href = '/AdminDashboard';
+                } else {
+                    window.location.href = '/EmployeeDashboard';
+                }
+            } catch (err) {
+                errorDiv.textContent = 'Impossible de contacter le serveur. Réessaie plus tard.';
+                errorDiv.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>

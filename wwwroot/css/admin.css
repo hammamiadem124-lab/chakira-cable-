@@ -1,0 +1,69 @@
+.admin-layout {
+  display: flex;
+  min-height: calc(100vh - 57px); /* moins la hauteur de la navbar */
+}
+
+.sidebar {
+  width: 230px;
+  background: var(--card-bg);
+  border-right: 1px solid var(--border);
+  padding: 20px 0;
+  flex-shrink: 0;
+}
+
+.sidebar a {
+  display: block;
+  padding: 12px 24px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  border-left: 3px solid transparent;
+}
+
+.sidebar a:hover {
+  background: #f1f5fb;
+}
+
+.sidebar a.active {
+  border-left-color: var(--primary);
+  background: #eef2ff;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.admin-content {
+  flex: 1;
+  padding: 24px;
+}
+
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.modal-overlay.open { display: flex; }
+
+.modal-box {
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 24px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+.modal-box h3 { margin-top: 0; }
+
+.icon-btn {
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  padding: 6px 12px;
+  font-size: 13px;
+  margin-right: 6px;
+}
+.icon-btn:hover { background: var(--primary); color: white; }

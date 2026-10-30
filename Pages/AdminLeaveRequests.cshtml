@@ -1,0 +1,155 @@
+@page
+@model HRLeaveApp.Pages.AdminLeaveRequestsModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Demandes de congé — HR Leave App</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+    <link rel="stylesheet" href="~/css/admin.css" />
+</head>
+<body>
+    <div class="navbar">
+        <span class="brand"><img src="~/images/logo.jpeg" alt="Logo" style="height:28px; vertical-align:middle; margin-right:8px;" />HR Leave App — Admin</span>
+        <div>
+            <span class="user-info" id="userInfo"></span>
+            <button onclick="logout()" style="margin-left:12px;">Déconnexion</button>
+        </div>
+    </div>
+
+    <div class="admin-layout">
+        <div class="sidebar">
+            <a href="/AdminAddEmployee">➕ Ajouter un employé</a>
+            <a href="/AdminEmployeesList">👥 Liste des employés</a>
+            <a href="/AdminLeaveRequests" class="active">📋 Demandes de congé</a>
+            <a href="/AdminAnnouncements">📢 Annonces</a>
+        </div>
+
+        <div class="admin-content">
+            <div class="card">
+                <h2>Demandes de congé</h2>
+                <div class="form-group" style="max-width:220px;">
+                    <label for="statusFilter">Filtrer par statut</label>
+                    <select id="statusFilter" onchange="loadRequests()">
+                        <option value="">Toutes</option>
+                        <option value="Pending">En attente</option>
+                        <option value="Approved">Approuvées</option>
+                        <option value="Rejected">Refusées</option>
+                    </select>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Employé</th>
+                            <th>CIN</th>
+                            <th>Période</th>
+                            <th>Type</th>
+                            <th>Motif</th>
+                            <th>Statut</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="requestsBody">
+                        <tr><td colspan="7">Chargement...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const token = sessionStorage.getItem('hr_token');
+        const employee = JSON.parse(sessionStorage.getItem('hr_employee') || 'null');
+
+        if (!token || !employee || employee.role !== 'Admin') {
+            window.location.href = '/Login';
+        }
+
+        document.getElementById('userInfo').textContent = `${employee.firstName} ${employee.lastName} (Admin)`;
+
+        function logout() {
+            sessionStorage.removeItem('hr_token');
+            sessionStorage.removeItem('hr_employee');
+            window.location.href = '/Login';
+        }
+
+        function badgeClass(status) {
+            if (status === 'Approved') return 'badge-approved';
+            if (status === 'Rejected') return 'badge-rejected';
+            return 'badge-pending';
+        }
+
+        function statusLabel(status) {
+            if (status === 'Approved') return 'Approuvé';
+            if (status === 'Rejected') return 'Refusé';
+            return 'En attente';
+        }
+
+        async function loadRequests() {
+            const tbody = document.getElementById('requestsBody');
+            const status = document.getElementById('statusFilter').value;
+            const url = status ? `/api/Leave?status=${status}` : '/api/Leave';
+
+            try {
+                const res = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.status === 401 || res.status === 403) { logout(); return; }
+                const data = await res.json();
+
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7">Aucune demande.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.map(r => `
+                    <tr>
+                        <td>${r.employeeName}</td>
+                        <td>${r.cin}</td>
+                        <td>${new Date(r.startDate).toLocaleDateString('fr-FR')} → ${new Date(r.endDate).toLocaleDateString('fr-FR')}</td>
+                        <td>${r.leaveType}</td>
+                        <td>${r.reason || '-'}</td>
+                        <td><span class="badge ${badgeClass(r.status)}">${statusLabel(r.status)}</span></td>
+                        <td>
+                            ${r.status === 'Pending' ? `
+                                <button class="btn-approve" onclick="review(${r.leaveRequestId}, true)">Accepter</button>
+                                <button class="btn-reject" onclick="review(${r.leaveRequestId}, false)">Refuser</button>
+                            ` : '-'}
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                tbody.innerHTML = '<tr><td colspan="7">Erreur de chargement.</td></tr>';
+            }
+        }
+
+        async function review(id, approve) {
+            try {
+                const res = await fetch(`/api/Leave/${id}/review`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ approve: approve })
+                });
+
+                if (!res.ok) {
+                    alert("Erreur lors du traitement de la demande.");
+                    return;
+                }
+
+                loadRequests();
+            } catch (err) {
+                alert('Impossible de contacter le serveur.');
+            }
+        }
+
+        loadRequests();
+    </script>
+</body>
+</html>
